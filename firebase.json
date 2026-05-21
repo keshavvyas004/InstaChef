@@ -1,0 +1,38 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "insta-1841b",
+          "appId": "1:250338435801:android:ddd8de8871e9db841c54c8",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "insta-1841b",
+          "configurations": {
+            "android": "1:250338435801:android:ddd8de8871e9db841c54c8",
+            "ios": "1:250338435801:ios:569e55d2c85a27b11c54c8",
+            "macos": "1:250338435801:ios:569e55d2c85a27b11c54c8",
+            "web": "1:250338435801:web:6bf8eed6575460751c54c8",
+            "windows": "1:250338435801:web:74d24918125694111c54c8"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

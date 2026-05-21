@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "250338435801",
+    "project_id": "insta-1841b",
+    "storage_bucket": "insta-1841b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250338435801:android:ddd8de8871e9db841c54c8",
+        "android_client_info": {
+          "package_name": "com.example.instachef"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbOvooLqCZp5xXsYJoM1bVwDS9_R0Hv4w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
