@@ -22,14 +22,14 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. Dynamically inject the missing iOS platform architecture
+      # 1. GENERATE THE MISSING ARCHITECTURE FIRST
       - name: Inject Missing iOS Compatibility Folder
         run: |
           flutter create --platforms=ios .
           cd ios
           pod repo update
           
-      # 2. Safely decode certificates and prepare the build keychain
+      # 2. SANITIZE AND IMPORT APP CERTIFICATES
       - name: Install Apple Certificate and Profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -37,32 +37,30 @@ jobs:
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # Create variables
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Import certificate and profile (stripping hidden newlines/spaces)
+          # The 'tr -d' safely strips invisible spaces or broken line feeds from GitHub secrets
           echo "$BUILD_CERTIFICATE_BASE64" | tr -d '\n ' | base64 --decode --output $CERTIFICATE_PATH
           echo "$BUILD_PROVISION_PROFILE_BASE64" | tr -d '\n ' | base64 --decode --output $PP_PATH
 
-          # Create temporary keychain
+          # Setup isolated temporary keychain environment
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import certificate to keychain
+          # Clean import flag execution
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -A
           
-          # Configure keychain settings
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH
           
-          # Apply provisioning profile to system folder
+          # Stage provisioning profile exactly where xcodebuild looks for it
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision
           
-      # 3. Create the ExportOptions plist (placed cleanly after the ios folder is injected)
+      # 3. WRITE THE EXPORT INSTRUCTIONS Safely
       - name: Create ExportOptions.plist
         run: |
           cat <<EOF > ios/Runner/ExportOptions.plist
@@ -84,7 +82,7 @@ jobs:
       - name: Build IPA
         run: flutter build ipa --release --export-options-plist=ios/Runner/ExportOptions.plist
         
-      # 4. Graceful cleanup step that won't fail the build if files are already missing
+      # 4. SILENT FAILING CLEANUP (Won't crash if the folder structure alters mid-process)
       - name: Clean up keychain and profile
         if: ${{ always() }}
         run: |
