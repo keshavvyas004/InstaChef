@@ -22,13 +22,13 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. GENERATE ARCHITECTURE AND OVERRIDE MINIMUM DEPLOYMENT TARGET
+      # 1. GENERATE ARCHITECTURE AND FORCE OVERRIDE DEPLOYMENT TARGETS
       - name: Inject Missing iOS Compatibility Folder
         run: |
           flutter create --platforms=ios .
           cd ios
           
-          # Force the global Podfile platform to iOS 16.0 to appease ML Kit dependencies
+          # Force the global Podfile platform line to iOS 16.0
           sed -i '' "s/# platform :ios, '12.0'/platform :ios, '16.0'/g" Podfile
           
           pod repo update
@@ -70,24 +70,14 @@ jobs:
           </plist>
           EOF
           
-      # 4. GET DEPENDENCIES AND INJECT TARGET OVERRIDES INTO DISCOVERED PLUGINS
+      # 4. FETCH DEPENDENCIES AND INJECT TARGET OVERRIDES SAFELY INSIDE THE EXISTING BLOCK
       - name: Get dependencies
         run: |
           flutter pub get
           cd ios
           
-          # Dynamically forces every underlying CocoaPod target to compile at iOS 16.0 
-          cat << 'EOF' >> Podfile
-
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              flutter_additional_ios_build_settings(target)
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-              end
-            end
-          end
-          EOF
+          # Inject the iOS 16.0 config line right inside the existing post_install block
+          sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n      target.build_configurations.each { |c| c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" Podfile
 
       # 5. EXECUTE A DEVELOPMENT BUILD
       - name: Build IPA
