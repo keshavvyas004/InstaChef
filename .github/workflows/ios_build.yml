@@ -29,38 +29,31 @@ jobs:
           cd ios
           pod repo update
           
-      # 2. SANITIZE AND IMPORT APP CERTIFICATES
-      - name: Install Apple Certificate and Profile
+      # 2. SANITIZE AND IMPORT PERSONAL CODE-SIGNING CERTIFICATE
+      - name: Install Apple Certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # The 'tr -d' safely strips invisible spaces or broken line feeds from GitHub secrets
+          # Safely decode the certificate text string generated on your Mac
           echo "$BUILD_CERTIFICATE_BASE64" | tr -d '\n ' | base64 --decode --output $CERTIFICATE_PATH
-          echo "$BUILD_PROVISION_PROFILE_BASE64" | tr -d '\n ' | base64 --decode --output $PP_PATH
 
           # Setup isolated temporary keychain environment
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Clean import flag execution
+          # Clean import execution
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -A
           
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH
           
-          # Stage provisioning profile exactly where xcodebuild looks for it
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision
-          
-      # 3. WRITE THE EXPORT INSTRUCTIONS Safely
+      # 3. WRITE THE SYSTEM INSTRUCTIONS FOR DEVELOPMENT EXPORT
       - name: Create ExportOptions.plist
         run: |
           cat <<EOF > ios/Runner/ExportOptions.plist
@@ -69,9 +62,9 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>ad-hoc</string>
-            <key>teamID</key>
-            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
           </dict>
           </plist>
           EOF
@@ -79,15 +72,15 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # 4. EXECUTE A DEVELOPMENT BUILD (Compatible with Personal Apple ID signing)
       - name: Build IPA
-        run: flutter build ipa --release --export-options-plist=ios/Runner/ExportOptions.plist
+        run: flutter build ipa --debug --export-options-plist=ios/Runner/ExportOptions.plist
         
-      # 4. SILENT FAILING CLEANUP (Won't crash if the folder structure alters mid-process)
-      - name: Clean up keychain and profile
+      # 5. GRACEFUL DISPOSAL
+      - name: Clean up keychain
         if: ${{ always() }}
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
-          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
