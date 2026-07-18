@@ -22,11 +22,15 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. GENERATE THE MISSING ARCHITECTURE FIRST
+      # 1. GENERATE ARCHITECTURE AND OVERRIDE MINIMUM DEPLOYMENT TARGET
       - name: Inject Missing iOS Compatibility Folder
         run: |
           flutter create --platforms=ios .
           cd ios
+          
+          # Force the global Podfile platform to iOS 16.0 to appease ML Kit dependencies
+          sed -i '' "s/# platform :ios, '12.0'/platform :ios, '16.0'/g" Podfile
+          
           pod repo update
           
       # 2. SANITIZE AND IMPORT PERSONAL CODE-SIGNING CERTIFICATE
@@ -39,15 +43,12 @@ jobs:
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Safely decode the certificate text string generated on your Mac
           echo "$BUILD_CERTIFICATE_BASE64" | tr -d '\n ' | base64 --decode --output $CERTIFICATE_PATH
 
-          # Setup isolated temporary keychain environment
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Clean import execution
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -A
           
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
@@ -69,14 +70,30 @@ jobs:
           </plist>
           EOF
           
+      # 4. GET DEPENDENCIES AND INJECT TARGET OVERRIDES INTO DISCOVERED PLUGINS
       - name: Get dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          cd ios
+          
+          # Dynamically forces every underlying CocoaPod target to compile at iOS 16.0 
+          cat << 'EOF' >> Podfile
 
-      # 4. EXECUTE A DEVELOPMENT BUILD (Compatible with Personal Apple ID signing)
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+              end
+            end
+          end
+          EOF
+
+      # 5. EXECUTE A DEVELOPMENT BUILD
       - name: Build IPA
         run: flutter build ipa --debug --export-options-plist=ios/Runner/ExportOptions.plist
         
-      # 5. GRACEFUL DISPOSAL
+      # 6. GRACEFUL DISPOSAL
       - name: Clean up keychain
         if: ${{ always() }}
         run: |
