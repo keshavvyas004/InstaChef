@@ -28,17 +28,13 @@ jobs:
       # 1. Force iOS deployment target configuration cleanly across the layout
       - name: Set iOS deployment target
         run: |
-          # Safely check and force the global platform target to 16.0
           if grep -q "^platform :ios" ios/Podfile; then
             sed -i '' "s/^platform :ios.*/platform :ios, '16.0'/" ios/Podfile
           else
             echo "platform :ios, '16.0'" | cat - ios/Podfile > temp && mv temp ios/Podfile
           fi
 
-          # Inline edit the existing post_install block instead of creating a new one
           sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n    target.build_configurations.each { |config| config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" ios/Podfile
-
-          # Update the Xcode project's own deployment target setting
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 16.0;/g' ios/Runner.xcodeproj/project.pbxproj
 
           cd ios
@@ -65,7 +61,7 @@ jobs:
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -A
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-      # 3. Dynamic Export Options using Xcode's Automatic Development configuration
+      # 3. Create a strict ExportOptions.plist specifying manual fallback structures
       - name: Create ExportOptions.plist
         env:
           TEAM_ID: ${{ secrets.TEAM_ID }}
@@ -75,18 +71,22 @@ jobs:
           echo '<plist version="1.0">' >> ios/Runner/ExportOptions.plist
           echo '<dict>' >> ios/Runner/ExportOptions.plist
           echo '  <key>method</key>' >> ios/Runner/ExportOptions.plist
+          echo '  <string>development</string>' >> ios/Runner/ExportOptions.plist
           echo '  <key>teamID</key>' >> ios/Runner/ExportOptions.plist
           echo "  <string>${TEAM_ID}</string>" >> ios/Runner/ExportOptions.plist
           echo '  <key>signingStyle</key>' >> ios/Runner/ExportOptions.plist
-          echo '  <string>automatic</string>' >> ios/Runner/ExportOptions.plist
+          echo '  <string>manual</string>' >> ios/Runner/ExportOptions.plist
           echo '</dict>' >> ios/Runner/ExportOptions.plist
           echo '</plist>' >> ios/Runner/ExportOptions.plist
 
-      # 4. Build step (invalid flag removed)
+      # 4. Build step with explicit build-settings passed to bypass online checks
       - name: Build IPA
         run: |
           flutter build ipa --debug \
-            --export-options-plist=ios/Runner/ExportOptions.plist
+            --export-options-plist=ios/Runner/ExportOptions.plist \
+            --build-name=1.0.0 \
+            --build-number=1 \
+            --no-codesign
 
       # 5. Clean up local runner environments
       - name: Clean up keychain
