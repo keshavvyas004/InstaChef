@@ -28,14 +28,14 @@ jobs:
       # 1. Force iOS deployment target configuration cleanly across the layout
       - name: Set iOS deployment target
         run: |
+          # Safely check and force the global platform target to 16.0
           if grep -q "^platform :ios" ios/Podfile; then
             sed -i '' "s/^platform :ios.*/platform :ios, '16.0'/" ios/Podfile
           else
-            sed -i '' "1i\\
-platform :ios, '16.0'
-" ios/Podfile
+            echo "platform :ios, '16.0'" | cat - ios/Podfile > temp && mv temp ios/Podfile
           fi
 
+          # Inject post_install build configuration changes cleanly if not already present
           if ! grep -q "IPHONEOS_DEPLOYMENT_TARGET" ios/Podfile; then
             cat <<'EOF' >> ios/Podfile
 
