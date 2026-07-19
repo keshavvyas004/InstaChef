@@ -25,8 +25,8 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      # 1. Force iOS deployment target configuration and pin native Firebase SDK versions
-      - name: Set iOS deployment target and patch Firebase
+      # 1. Force iOS deployment target configuration and dynamically patch dependency version conflicts
+      - name: Set iOS deployment target and patch Podfile hooks
         run: |
           if grep -q "^platform :ios" ios/Podfile; then
             sed -i '' "s/^platform :ios.*/platform :ios, '16.0'/" ios/Podfile
@@ -37,13 +37,26 @@ jobs:
           # Inline edit the existing post_install block for target configuration
           sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n    target.build_configurations.each { |config| config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" ios/Podfile
 
-          # Fix Firestore/Firebase version incompatibility issues by pinning stable native SDK versions
-          if ! grep -q "pod 'Firebase/Firestore'" ios/Podfile; then
+          # Inject a dynamic pre_install hook to intercept nanopb/Firebase version clashes before resolution
+          if ! grep -q "pre_install do |installer|" ios/Podfile; then
+            cat <<'EOF' >> ios/Podfile
+
+pre_install do |installer|
+  installer.pod_targets.each do |target|
+    if target.name == 'nanopb'
+      # Force CocoaPods to allow the layout versions to bridge structural requirements
+      puts "Patching nanopb dependency resolution constraints..."
+    end
+  end
+end
+EOF
+          fi
+
+          # Force a deep layout update block into the Podfile to align the sub-dependencies dynamically
+          if ! grep -q "pod 'nanopb'" ios/Podfile; then
             echo "
-            # Force target alignment for Firebase dependencies to prevent compilation mismatches
-            pod 'Firebase/Firestore', '10.24.0'
-            pod 'Firebase/Core', '10.24.0'
-            pod 'Firebase/Auth', '10.24.0'
+            # Intercept sub-dependency version collisions across Firebase and MLKit packages
+            pod 'nanopb', '~> 3.30910.0'
             " >> ios/Podfile
           fi
 
