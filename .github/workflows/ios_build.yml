@@ -36,10 +36,9 @@ jobs:
           fi
 
           # Inline edit the existing post_install block instead of creating a new one
-          # It finds Flutter's hook wrapper and inserts the loop to target configuration configurations right next to it
           sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n    target.build_configurations.each { |config| config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" ios/Podfile
 
-          # Update the Xcode project's own deployment target configuration setting
+          # Update the Xcode project's own deployment target setting
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 16.0;/g' ios/Runner.xcodeproj/project.pbxproj
 
           cd ios
@@ -83,12 +82,11 @@ jobs:
           echo '</dict>' >> ios/Runner/ExportOptions.plist
           echo '</plist>' >> ios/Runner/ExportOptions.plist
 
-      # 4. Build with target explicitly assigned via CLI flag overrides
+      # 4. Build step (invalid flag removed)
       - name: Build IPA
         run: |
           flutter build ipa --debug \
-            --export-options-plist=ios/Runner/ExportOptions.plist \
-            --ios-deployment-target=16.0
+            --export-options-plist=ios/Runner/ExportOptions.plist
 
       # 5. Clean up local runner environments
       - name: Clean up keychain
