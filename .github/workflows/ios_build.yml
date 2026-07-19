@@ -25,49 +25,30 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      # 1. Force iOS deployment target configuration and dynamically patch dependency version conflicts
-      - name: Set iOS deployment target and patch Podfile hooks
+      # 1. Force iOS deployment target configuration
+      - name: Set iOS deployment target
         run: |
+          # Set platform
           if grep -q "^platform :ios" ios/Podfile; then
             sed -i '' "s/^platform :ios.*/platform :ios, '16.0'/" ios/Podfile
           else
             echo "platform :ios, '16.0'" | cat - ios/Podfile > temp && mv temp ios/Podfile
           fi
 
-          # Inline edit the existing post_install block for target configuration
+          # Inline edit Podfile hooks
           sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n    target.build_configurations.each { |config| config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" ios/Podfile
+          
+          # Force nanopb dependency alignment
+          echo "pod 'nanopb', '~> 3.30910.0'" >> ios/Podfile
 
-          # Inject a dynamic pre_install hook to intercept nanopb/Firebase version clashes before resolution
-          if ! grep -q "pre_install do |installer|" ios/Podfile; then
-            cat <<'EOF' >> ios/Podfile
-
-pre_install do |installer|
-  installer.pod_targets.each do |target|
-    if target.name == 'nanopb'
-      # Force CocoaPods to allow the layout versions to bridge structural requirements
-      puts "Patching nanopb dependency resolution constraints..."
-    end
-  end
-end
-EOF
-          fi
-
-          # Force a deep layout update block into the Podfile to align the sub-dependencies dynamically
-          if ! grep -q "pod 'nanopb'" ios/Podfile; then
-            echo "
-            # Intercept sub-dependency version collisions across Firebase and MLKit packages
-            pod 'nanopb', '~> 3.30910.0'
-            " >> ios/Podfile
-          fi
-
-          # Update the Xcode project's own deployment target setting
+          # Update Xcode project settings
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 16.0;/g' ios/Runner.xcodeproj/project.pbxproj
 
           cd ios
           pod repo update
           pod install
 
-      # 2. Install your personal development certificate
+      # 2. Install Apple Certificate
       - name: Install Apple Certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -87,7 +68,7 @@ EOF
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -A
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-      # 3. Create a strict ExportOptions.plist specifying manual fallback structures
+      # 3. Create ExportOptions.plist
       - name: Create ExportOptions.plist
         env:
           TEAM_ID: ${{ secrets.TEAM_ID }}
@@ -105,7 +86,7 @@ EOF
           echo '</dict>' >> ios/Runner/ExportOptions.plist
           echo '</plist>' >> ios/Runner/ExportOptions.plist
 
-      # 4. Build step with explicit build-settings passed to bypass online checks
+      # 4. Build IPA
       - name: Build IPA
         run: |
           flutter build ipa --debug \
@@ -114,7 +95,7 @@ EOF
             --build-number=1 \
             --no-codesign
 
-      # 5. Clean up local runner environments
+      # 5. Clean up
       - name: Clean up keychain
         if: ${{ always() }}
         run: |
