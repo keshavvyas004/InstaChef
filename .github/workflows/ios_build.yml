@@ -35,19 +35,17 @@ jobs:
             echo "platform :ios, '16.0'" | cat - ios/Podfile > temp && mv temp ios/Podfile
           fi
 
-          # Inject post_install build configuration changes cleanly if not already present
+          # Inject post_install configuration safely using echo instead of heredocs to prevent YAML errors
           if ! grep -q "IPHONEOS_DEPLOYMENT_TARGET" ios/Podfile; then
-            cat <<'EOF' >> ios/Podfile
-
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-    end
-  end
-end
-EOF
+            echo "" >> ios/Podfile
+            echo "post_install do |installer|" >> ios/Podfile
+            echo "  installer.pods_project.targets.each do |target|" >> ios/Podfile
+            echo "    flutter_additional_ios_build_settings(target)" >> ios/Podfile
+            echo "    target.build_configurations.each do |config|" >> ios/Podfile
+            echo "      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'" >> ios/Podfile
+            echo "    end" >> ios/Podfile
+            echo "  end" >> ios/Podfile
+            echo "end" >> ios/Podfile
           fi
 
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 16.0;/g' ios/Runner.xcodeproj/project.pbxproj
@@ -81,20 +79,17 @@ EOF
         env:
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
-          cat <<EOF > ios/Runner/ExportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>${TEAM_ID}</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-          </dict>
-          </plist>
-          EOF
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > ios/Runner/ExportOptions.plist
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ios/Runner/ExportOptions.plist
+          echo '<plist version="1.0">' >> ios/Runner/ExportOptions.plist
+          echo '<dict>' >> ios/Runner/ExportOptions.plist
+          echo '  <key>method</key>' >> ios/Runner/ExportOptions.plist
+          echo '  <key>teamID</key>' >> ios/Runner/ExportOptions.plist
+          echo "  <string>${TEAM_ID}</string>" >> ios/Runner/ExportOptions.plist
+          echo '  <key>signingStyle</key>' >> ios/Runner/ExportOptions.plist
+          echo '  <string>automatic</string>' >> ios/Runner/ExportOptions.plist
+          echo '</dict>' >> ios/Runner/ExportOptions.plist
+          echo '</plist>' >> ios/Runner/ExportOptions.plist
 
       # 4. Build with target explicitly assigned via CLI flag overrides
       - name: Build IPA
