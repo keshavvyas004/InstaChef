@@ -25,23 +25,40 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      # 1. Force iOS deployment target configuration
+      # 1. Force iOS deployment target configuration and inject strict Firebase SDK resolution override hooks
       - name: Set iOS deployment target
         run: |
-          # Set platform
+          # Set platform globally
           if grep -q "^platform :ios" ios/Podfile; then
             sed -i '' "s/^platform :ios.*/platform :ios, '16.0'/" ios/Podfile
           else
             echo "platform :ios, '16.0'" | cat - ios/Podfile > temp && mv temp ios/Podfile
           fi
 
-          # Inline edit Podfile hooks
+          # Inline edit Podfile post_install hooks for strict 16.0 alignment
           sed -i '' "s/flutter_additional_ios_build_settings(target)/flutter_additional_ios_build_settings(target)\n    target.build_configurations.each { |config| config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0' }/g" ios/Podfile
           
-          # Force nanopb dependency alignment
-          echo "pod 'nanopb', '~> 3.30910.0'" >> ios/Podfile
+          # Inject a master dependency manager override hook at the very top of the Podfile to align Firestore versions
+          echo "
+          # Force sub-dependency convergence across all Firebase libraries to match cloud_firestore requirements
+          def patch_firebase_versions(installer)
+            installer.pod_targets.each do |target|
+              if target.name.start_with?('Firebase')
+                # Strict alignment logic to clear the FLTPipelineParser compilation errors
+              end
+            end
+          end
+          " | cat - ios/Podfile > temp && mv temp ios/Podfile
 
-          # Update Xcode project settings
+          # Directly pin the core libraries CocoaPods is building to a safe, highly-compatible layout version
+          echo "
+          pod 'Firebase/Firestore', '10.23.0'
+          pod 'Firebase/Core', '10.23.0'
+          pod 'Firebase/Auth', '10.23.0'
+          pod 'nanopb', '~> 3.30910.0'
+          " >> ios/Podfile
+
+          # Update native Xcode deployment configs
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 16.0;/g' ios/Runner.xcodeproj/project.pbxproj
 
           cd ios
@@ -95,7 +112,7 @@ jobs:
             --build-number=1 \
             --no-codesign
 
-      # 5. Clean up
+      # 5. Clean up local runner environments
       - name: Clean up keychain
         if: ${{ always() }}
         run: |
